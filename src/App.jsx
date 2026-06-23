@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   Key, 
@@ -9,11 +9,6 @@ import {
   Download, 
   Trash2, 
   FileText, 
-  Image as ImageIcon, 
-  CheckCircle, 
-  XCircle, 
-  HelpCircle, 
-  Terminal, 
   Palette, 
   Grid, 
   FileCode, 
@@ -23,52 +18,82 @@ import {
   RotateCcw,
   Check,
   AlertTriangle,
-  Info
+  Info,
+  Cpu,
+  MessageSquareText,
+  ShieldCheck,
+  ToggleLeft,
+  ToggleRight,
+  Terminal,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 
-const SYSTEM_PROMPT = `You are Creatix AI, a premier Senior UI/UX Designer and Frontend Engineer.
+const SYSTEM_PROMPT = `You are Creatix AI, a premier Senior UI/UX Designer and Frontend Engineer. 
 Your ONLY role is to generate beautiful, production-ready, modern frontend code, website layouts, custom Tailwind components, and designs based on user requirements.
 
 IMPORTANT COMPLIANCE FILTER:
-If the user's prompt asks for anything unrelated to UI/UX design, frontend code, wireframes, HTML/React component building, landing pages, or digital layout styling (e.g., general knowledge, math, history, coding theory, algorithmic advice, personal chat, politics), you MUST immediately refuse with the EXACT phrase:
+If the user's prompt asks for anything unrelated to UI/UX design, frontend code, wireframes, HTML/React component building, landing pages, or digital layout styling, you MUST immediately refuse with the EXACT phrase:
 "I am Creatix AI. I can only help generate, modify, and improve website UI/UX designs and frontend code."
-Do not provide any other answer or commentary if the compliance filter is triggered.
 
-If the prompt IS UI/UX related, generate a single premium self-contained website template inside an HTML structure. 
-Return your response in structured JSON format with this exact shape:
+Return your response in structured JSON format:
 {
-  "reasoning": "Explain your premium design choices, colors selected, fonts, visual hierarchy, and animations used.",
-  "components": ["List of sections generated (e.g., Hero, Navbar, Interactive Pricing, Footer)"],
+  "reasoning": "Explain design choices, colors, fonts, visual hierarchy, and animations used.",
+  "components": ["List of sections generated"],
   "palette": ["HEX codes used in design"],
-  "code": "A single comprehensive HTML code string containing complete embedded Tailwind CSS (via CDN), Google Fonts (e.g. Plus Jakarta Sans or Inter), custom styles inside <style>, and rich modern interactivity using standard JS. Ensure beautiful gradients, glassmorphism, fully responsive sections, and rich mock interactive content with modern icons (Lucide or FontAwesome)."
+  "code": "A single comprehensive HTML code string containing complete embedded Tailwind CSS (via CDN), custom styles, and modern interactivity."
 }`;
+
+const AVAILABLE_MODELS = [
+  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Stable)' },
+  { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Highly Compatible)' },
+  { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (High Intelligence)' }
+];
 
 export default function App() {
   const [apiKey, setApiKey] = useState('');
-  const [isKeyValid, setIsKeyValid] = useState(null); 
+  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [isKeyValid, setIsKeyValid] = useState(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState('preview'); 
-  const [viewportSize, setViewportSize] = useState('desktop'); 
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState('preview');
+  const [viewportSize, setViewportSize] = useState('desktop');
   const [generationOutput, setGenerationOutput] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [validationDetails, setValidationDetails] = useState('');
 
   useEffect(() => {
     const savedKey = sessionStorage.getItem('creatix_gemini_key');
+    const savedModel = sessionStorage.getItem('creatix_gemini_model');
+    if (savedModel) {
+      setSelectedModel(savedModel);
+    }
     if (savedKey) {
       setApiKey(savedKey);
-      validateApiKeyOnLoad(savedKey);
+      validateApiKeyOnLoad(savedKey, savedModel || 'gemini-2.5-flash');
     }
   }, []);
 
-  const validateApiKeyOnLoad = async (key) => {
+  const handleModelChange = (modelId) => {
+    setSelectedModel(modelId);
+    sessionStorage.setItem('creatix_gemini_model', modelId);
+    if (apiKey.trim() && isKeyValid === 'valid') {
+      validateApiKeyOnLoad(apiKey, modelId);
+    }
+  };
+
+  const validateApiKeyOnLoad = async (key, modelId) => {
     setIsKeyValid('checking');
     try {
-      const isValid = await testGeminiKey(key);
+      const isValid = await testGeminiKey(key, modelId);
       if (isValid) {
         setIsKeyValid('valid');
+        setIsDemoMode(false);
       } else {
         setIsKeyValid('invalid');
       }
@@ -77,39 +102,81 @@ export default function App() {
     }
   };
 
-  const testGeminiKey = async (keyToTest) => {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${keyToTest}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "Respond only with 'OK'." }] }]
-          })
+  const testGeminiKey = async (keyToTest, modelId) => {
+    const modelsToTry = [
+      modelId,
+      ...AVAILABLE_MODELS.map(m => m.id).filter(id => id !== modelId)
+    ];
+
+    let errorsEncountered = [];
+
+    for (let currentModel of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${keyToTest}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Respond only with 'OK'." }] }]
+            })
+          }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            if (currentModel !== modelId) {
+              setSelectedModel(currentModel);
+              sessionStorage.setItem('creatix_gemini_model', currentModel);
+            }
+            return true;
+          }
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          const errMsg = errData?.error?.message || `HTTP error ${response.status}`;
+          errorsEncountered.push(`${currentModel}: ${errMsg}`);
         }
-      );
-      if (!response.ok) return false;
-      const data = await response.json();
-      return !!data.candidates?.[0]?.content?.parts?.[0]?.text;
-    } catch (e) {
-      return false;
+      } catch (e) {
+        errorsEncountered.push(`${currentModel}: ${e.message || "Network request failed"}`);
+      }
     }
+    
+    setValidationDetails(errorsEncountered.join("\n"));
+    return false;
   };
 
   const handleValidateKey = async () => {
+    setValidationDetails('');
     if (!apiKey.trim()) {
       setIsKeyValid('invalid');
+      setValidationDetails("API key field is empty.");
       return;
     }
     setIsKeyValid('checking');
-    const result = await testGeminiKey(apiKey);
+    const result = await testGeminiKey(apiKey, selectedModel);
     if (result) {
       setIsKeyValid('valid');
+      setIsDemoMode(false);
       sessionStorage.setItem('creatix_gemini_key', apiKey);
     } else {
       setIsKeyValid('invalid');
     }
+  };
+
+  const handleToggleDemoMode = () => {
+    setIsDemoMode(prev => {
+      const next = !prev;
+      if (next) {
+        setIsKeyValid('valid');
+      } else {
+        setIsKeyValid(apiKey ? 'checking' : null);
+        if (apiKey) {
+          validateApiKeyOnLoad(apiKey, selectedModel);
+        }
+      }
+      return next;
+    });
   };
 
   const handleFileUpload = (e) => {
@@ -143,6 +210,43 @@ export default function App() {
 
   const removeFile = (id) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  const callGeminiUtility = async (taskPrompt) => {
+    if (!apiKey) return null;
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: taskPrompt }] }]
+          })
+        }
+      );
+      const data = await response.json();
+      return data.candidates[0].content.parts[0].text;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  };
+
+  const handleOptimizePrompt = async () => {
+    if (!apiKey) return;
+    setIsOptimizing(true);
+    const optimized = await callGeminiUtility(`Rewrite this design prompt to be professional, descriptive, and expert-level for a UI/UX designer: "${prompt}"`);
+    if (optimized) setPrompt(optimized);
+    setIsOptimizing(false);
+  };
+
+  const handleCriticizeDesign = async () => {
+    if (!apiKey || !generationOutput) return;
+    setIsAnalyzing(true);
+    const feedback = await callGeminiUtility(`Act as a professional design critic. Analyze this design reasoning and code: "${generationOutput.reasoning}". Provide 3 short, actionable UX/UI improvements.`);
+    alert(feedback || "Analysis could not be generated.");
+    setIsAnalyzing(false);
   };
 
   const handleGenerate = async () => {
@@ -195,12 +299,43 @@ export default function App() {
       return;
     }
 
-    if (!apiKey.trim() || isKeyValid !== 'valid') {
-      setErrorMessage("A valid Gemini API key is required to use the generator. Please insert and validate your key in the Left Sidebar.");
+    if (!isDemoMode && (!apiKey.trim() || isKeyValid !== 'valid')) {
+      setErrorMessage("A valid Gemini API key is required to use the generator. Please insert and validate your key in the Left Sidebar, or toggle 'Demo Mode'.");
       return;
     }
 
     setIsGenerating(true);
+
+    if (isDemoMode) {
+      await new Promise(r => setTimeout(r, 1500));
+      let mockResult = {
+        reasoning: "Selected a modern high-contrast design system featuring glassmorphism elements, custom smooth transition backdrops, and interactive modular cards optimized for maximum user engagement and responsiveness.",
+        components: ["Navigation Bar", "Hero Spotlight Section", "Interactive Feature Grid", "Action Form Component", "Footer"],
+        palette: ["#4F46E5", "#06B6D4", "#0F172A", "#FFFFFF"],
+        code: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creatix Premium Layout</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
+  <nav class="px-6 py-4 border-b border-slate-800 bg-slate-900/40 backdrop-blur flex justify-between items-center">
+    <span class="text-base font-bold tracking-wider bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">CREATIX DEMO PREVIEW</span>
+  </nav>
+  <div class="max-w-4xl mx-auto px-6 py-20 text-center flex-1 flex flex-col justify-center items-center">
+    <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-6">Generated Demo Workspace</h1>
+    <p class="text-slate-400 text-base max-w-xl leading-relaxed mb-8">"${prompt}"</p>
+  </div>
+</body>
+</html>`
+      };
+      setGenerationOutput(mockResult);
+      setActiveTab('preview');
+      setIsGenerating(false);
+      return;
+    }
 
     try {
       let fileContext = "";
@@ -225,70 +360,78 @@ export default function App() {
       }
 
       const fullUserPrompt = `User Request: "${prompt}"\n${fileContext}\n\nGenerate beautiful website/component UI matching this request. Implement high quality custom styles and elegant features.`;
-
-      const parts = [
-        { text: fullUserPrompt }
-      ];
-
-      imagesPayload.forEach(img => {
-        parts.push(img);
-      });
+      const parts = [{ text: fullUserPrompt }, ...imagesPayload];
 
       const callGemini = async (retries = 5, delay = 1000) => {
-        try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [
-                  { role: 'user', parts: parts }
-                ],
-                systemInstruction: {
-                  parts: [{ text: SYSTEM_PROMPT }]
-                },
-                generationConfig: {
-                  responseMimeType: "application/json",
-                  responseSchema: {
-                    type: "OBJECT",
-                    properties: {
-                      reasoning: { type: "STRING" },
-                      components: { type: "ARRAY", items: { type: "STRING" } },
-                      palette: { type: "ARRAY", items: { type: "STRING" } },
-                      code: { type: "STRING" }
-                    },
-                    required: ["reasoning", "components", "palette", "code"]
+        const modelsToTry = [
+          selectedModel,
+          ...AVAILABLE_MODELS.map(m => m.id).filter(id => id !== selectedModel)
+        ];
+
+        let lastError = null;
+
+        for (let currentModel of modelsToTry) {
+          try {
+            const res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ role: 'user', parts: parts }],
+                  systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                  generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                      type: "OBJECT",
+                      properties: {
+                        reasoning: { type: "STRING" },
+                        components: { type: "ARRAY", items: { type: "STRING" } },
+                        palette: { type: "ARRAY", items: { type: "STRING" } },
+                        code: { type: "STRING" }
+                      },
+                      required: ["reasoning", "components", "palette", "code"]
+                    }
                   }
-                }
-              })
-            }
-          );
+                })
+              }
+            );
 
-          if (!res.ok) {
-            if (retries > 0) {
-              await new Promise(r => setTimeout(r, delay));
-              return callGemini(retries - 1, delay * 2);
-            }
-            throw new Error(`API Error: ${res.statusText}`);
-          }
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              const serverMessage = errData?.error?.message || "";
+              
+              if (res.status === 404 || serverMessage.includes("not found") || serverMessage.includes("not supported")) {
+                continue;
+              }
 
-          const data = await res.json();
-          return data;
-        } catch (err) {
-          if (retries > 0) {
-            await new Promise(r => setTimeout(r, delay));
-            return callGemini(retries - 1, delay * 2);
+              if (retries > 0) {
+                await new Promise(r => setTimeout(r, delay));
+                return callGemini(retries - 1, delay * 2);
+              }
+              throw new Error(`API Error: ${serverMessage || res.statusText}`);
+            }
+
+            const data = await res.json();
+            if (currentModel !== selectedModel) {
+              setSelectedModel(currentModel);
+              sessionStorage.setItem('creatix_gemini_model', currentModel);
+            }
+            return data;
+
+          } catch (err) {
+            lastError = err;
           }
-          throw err;
         }
+        
+        throw lastError || new Error("All configured AI models in the pipeline returned error states.");
       };
 
       const result = await callGemini();
       const rawText = result.candidates?.[0]?.content?.parts?.[0]?.text;
       
       if (!rawText) {
-        throw new Error("Could not parse output response from Gemini. Please verify your prompt format.");
+        throw new Error("Could not parse output response from Gemini.");
       }
 
       const parsedData = JSON.parse(rawText);
@@ -308,7 +451,7 @@ export default function App() {
 
     } catch (err) {
       console.error(err);
-      setErrorMessage(err.message || "An unexpected error occurred while communicating with Gemini. Please try again.");
+      setErrorMessage(err.message || "An unexpected error occurred while communicating with Gemini.");
     } finally {
       setIsGenerating(false);
     }
@@ -338,27 +481,10 @@ export default function App() {
 /creatix-project
   ├── index.html            (Direct entrypoint containing fully built UI & Tailwind styles)
   ├── package.json          (Self-contained dependency configurations)
-  ├── tailwind.config.js    (Tailwind CSS config presets mapping specified colors)
-  ├── README.md             (Premium startup guides, components catalog, design system reasoning)
-  ├── /src
-       ├── components.js    (Parsed component sub-blocks with interactive code scripts)
-       └── styles.css       (Specialized styles and keyframe layouts)
+  └── README.md             (Premium startup guides, components catalog, design system reasoning)
     `;
 
     const readmeContent = `# Created with Creatix AI
-
-## Project Specifications
-- **Design Philosophy:** Modern premium high-fidelity glassmorphism responsive layouts.
-- **Tailwind Palette:** ${JSON.stringify(generationOutput.palette || [])}
-- **Components Included:** ${JSON.stringify(generationOutput.components || [])}
-
-## Setup Guide
-1. Launch direct browser sandbox on \`index.html\`.
-2. To use within standard build setups:
-   - Paste the main HTML content into your custom layout.
-   - Install tailwindcss packages configuration inside root folders.
-
----
 Generated reasoning:
 ${generationOutput.reasoning}
 `;
@@ -386,6 +512,8 @@ ${generationOutput.code}
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
+      
+      {/* Header Bar */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center space-x-3">
           <div className="bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 p-2.5 rounded-xl shadow-lg shadow-indigo-500/10">
@@ -404,77 +532,129 @@ ${generationOutput.code}
           </div>
         </div>
 
+        {/* Top Status */}
         <div className="flex items-center space-x-4">
           <div className="hidden md:flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-full border border-slate-800">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+            <div className={`w-2 h-2 rounded-full ${isDemoMode ? 'bg-purple-500' : 'bg-emerald-500'} animate-ping`}></div>
             <span className="text-[11px] text-slate-400">
-              Model: <span className="text-indigo-400 font-mono">gemini-2.5-flash-preview-09-2025</span>
+              Active Model: <span className="text-indigo-400 font-mono">{isDemoMode ? 'Local Template Engine' : selectedModel}</span>
             </span>
           </div>
         </div>
       </header>
 
+      {/* Main Workspace Frame */}
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        {/* Left Sidebar Frame */}
         <aside className="w-full lg:w-[380px] border-r border-slate-800 bg-slate-900/50 flex flex-col shrink-0 overflow-y-auto">
-          <div className="p-5 border-b border-slate-800 bg-slate-950/40">
-            <div className="flex items-center justify-between mb-3">
+          
+          {/* Gemini API Key Configuration Panel */}
+          <div className="p-5 border-b border-slate-800 bg-slate-950/40 space-y-4">
+            <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                 <Key className="w-4 h-4 text-indigo-400" />
                 Gemini API Key Guard
               </span>
-              {isKeyValid === 'valid' && (
+              {isDemoMode ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-400/10 text-purple-400 border border-purple-400/20 shadow-sm">
+                  <ShieldCheck className="w-3 h-3 mr-1" /> Demo Active
+                </span>
+              ) : isKeyValid === 'valid' ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 shadow-sm shadow-emerald-500/5">
                   <CheckCircle className="w-3 h-3 mr-1" /> API Connected
                 </span>
-              )}
-              {isKeyValid === 'invalid' && (
+              ) : isKeyValid === 'invalid' ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-400/10 text-rose-400 border border-rose-400/20 shadow-sm shadow-rose-500/5">
                   <XCircle className="w-3 h-3 mr-1" /> Invalid API Key
                 </span>
-              )}
-              {isKeyValid === 'checking' && (
+              ) : isKeyValid === 'checking' ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-400/10 text-amber-400 border border-amber-400/20 animate-pulse">
                   Verifying...
                 </span>
-              )}
-              {isKeyValid === null && (
+              ) : (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
                   Not Configured
                 </span>
               )}
             </div>
 
-            <p className="text-[11px] text-slate-400 mb-3 leading-relaxed">
-              Required to communicate with Gemini. Your credentials remain safe and secure, stored locally in memory only.
-            </p>
-
-            <div className="space-y-2">
-              <div className="relative">
-                <input
-                  type="password"
-                  placeholder="Paste your Gemini API key (AIzaSy...)"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-slate-600 font-mono"
-                />
+            {/* Quick Toggle for Demo Mode */}
+            <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-semibold text-slate-200">Demo / Preview Mode</span>
+                <span className="text-[9px] text-slate-400">Generates instant mock code templates without key</span>
               </div>
-              <button
-                onClick={handleValidateKey}
-                disabled={isKeyValid === 'checking'}
-                className="w-full bg-slate-800 hover:bg-slate-750 text-white font-medium py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center space-x-2 border border-slate-750 hover:border-slate-700 active:scale-[0.98] disabled:opacity-50"
+              <button 
+                onClick={handleToggleDemoMode}
+                className="text-slate-400 hover:text-white transition-colors"
               >
-                <span>Validate API Key</span>
+                {isDemoMode ? (
+                  <ToggleRight className="w-8 h-8 text-indigo-500" />
+                ) : (
+                  <ToggleLeft className="w-8 h-8 text-slate-650" />
+                )}
               </button>
             </div>
+
+            {!isDemoMode && (
+              <>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Required to communicate with Gemini. Your credentials remain safe and secure, stored locally in memory only.
+                </p>
+
+                {/* Model Selector Dropdown */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                    <Cpu className="w-3 h-3 text-indigo-400" /> Choose Model Endpoint
+                  </label>
+                  <select 
+                    value={selectedModel}
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  >
+                    {AVAILABLE_MODELS.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Paste your Gemini API key (AIzaSy...)"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-slate-600 font-mono"
+                    />
+                  </div>
+                  <button
+                    onClick={handleValidateKey}
+                    disabled={isKeyValid === 'checking'}
+                    className="w-full bg-slate-800 hover:bg-slate-750 text-white font-medium py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center space-x-2 border border-slate-750 hover:border-slate-700 active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <span>Validate API Key</span>
+                  </button>
+
+                  {validationDetails && (
+                    <div className="text-[10px] text-rose-400 bg-rose-500/5 border border-rose-500/10 p-2.5 rounded-lg font-mono whitespace-pre-wrap break-all leading-normal">
+                      <strong>Diagnostic details:</strong> {validationDetails}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
+          {/* Prompt input Form */}
           <div className="p-5 flex-1 flex flex-col space-y-5">
             <div>
               <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
                 UI Prompt Textarea
               </label>
               <textarea
-                placeholder="Describe your design vision in depth... (e.g. 'Build a modern luxury real estate platform with black aesthetic, interactive search filtration, animated premium card grid')"
+                placeholder="Describe your design vision... (e.g. 'Build a modern luxury real estate platform with black aesthetic, interactive search filtration, animated premium card grid')"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 rows={6}
@@ -482,6 +662,29 @@ ${generationOutput.code}
               />
             </div>
 
+            {/* Prompt Helper Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={handleOptimizePrompt}
+                disabled={isOptimizing || !apiKey}
+                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
+                title={!apiKey ? "Enter API Key to Optimize" : "Generate a detailed design requirements prompt"}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Optimize Prompt</span>
+              </button>
+              <button 
+                onClick={handleCriticizeDesign}
+                disabled={isAnalyzing || !generationOutput || !apiKey}
+                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
+                title={!generationOutput ? "Generate UI First" : "Get expert design feedback"}
+              >
+                <MessageSquareText className="w-3.5 h-3.5 text-blue-400" />
+                <span>Design Critic</span>
+              </button>
+            </div>
+
+            {/* Drag & Drop File Upload Area */}
             <div>
               <span className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
                 File Upload Area (Reference Assets)
@@ -503,6 +706,7 @@ ${generationOutput.code}
                 </span>
               </div>
 
+              {/* Uploaded File List */}
               {uploadedFiles.length > 0 && (
                 <div className="mt-3.5 space-y-2">
                   <div className="flex items-center justify-between">
@@ -550,6 +754,7 @@ ${generationOutput.code}
               )}
             </div>
 
+            {/* Error Message Box */}
             {errorMessage && (
               <div className="bg-rose-500/10 border border-rose-500/25 rounded-xl p-3 text-xs text-rose-400 leading-relaxed flex items-start space-x-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -557,6 +762,7 @@ ${generationOutput.code}
               </div>
             )}
 
+            {/* Large Generate Action Trigger */}
             <div className="pt-2">
               <button
                 onClick={handleGenerate}
@@ -580,8 +786,8 @@ ${generationOutput.code}
                 )}
               </button>
               {isKeyValid !== 'valid' && (
-                <p className="text-[10px] text-amber-500 text-center mt-2 font-medium">
-                  * Verify your Gemini API key above to enable generation
+                <p className="text-[10px] text-amber-500 text-center mt-2 font-medium animate-pulse">
+                  * Verify API key or Switch to "Demo / Preview Mode" to Generate Designs
                 </p>
               )}
             </div>
@@ -589,8 +795,13 @@ ${generationOutput.code}
           </div>
         </aside>
 
+        {/* Right Output Workspace Panel */}
         <section className="flex-1 bg-slate-950 flex flex-col min-h-0">
+          
+          {/* Top Control Bar (Tabs & Viewports) */}
           <div className="border-b border-slate-800 bg-slate-900/60 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            {/* Nav Workspace Tabs */}
             <div className="flex bg-slate-950 border border-slate-800 p-1.5 rounded-xl self-start sm:self-auto">
               <button
                 onClick={() => setActiveTab('preview')}
@@ -627,8 +838,11 @@ ${generationOutput.code}
               </button>
             </div>
 
+            {/* Quick Actions (Copy, Download, Viewports) */}
             {generationOutput && (
               <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+                
+                {/* Responsive Width Toggles */}
                 {activeTab === 'preview' && (
                   <div className="flex bg-slate-950 border border-slate-800 p-1 rounded-lg">
                     <button
@@ -655,6 +869,7 @@ ${generationOutput.code}
                   </div>
                 )}
 
+                {/* Actions */}
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={copyToClipboard}
@@ -674,28 +889,35 @@ ${generationOutput.code}
                 </div>
               </div>
             )}
+
           </div>
 
+          {/* Main Workspace Frame (Dynamic Content) */}
           <div className="flex-1 relative overflow-hidden flex flex-col bg-slate-950">
+            
+            {/* Generating Overlay State */}
             {isGenerating && (
               <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
                 <div className="relative mb-6">
+                  {/* Outer spinning ring */}
                   <div className="w-20 h-20 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin"></div>
+                  {/* Pulsing core symbol */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <Sparkles className="w-7 h-7 text-indigo-400 animate-bounce" />
                   </div>
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2 animate-pulse">Creatix UI Generation Pipeline active</h3>
                 <p className="text-slate-400 text-sm max-w-md leading-relaxed">
-                  Synthesizing prompt, reference documents, and mapping high-end styling systems to live components inside isolation.
+                  {isDemoMode ? "Retrieving tailored design system tokens and loading preview layouts..." : `Synthesizing layout requirements with active model ${selectedModel}...`}
                 </p>
                 <div className="mt-8 flex items-center space-x-3 text-xs bg-slate-900 border border-slate-800 px-4 py-2 rounded-full text-slate-300">
                   <Terminal className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                  <span className="font-mono">Compiling layouts, CSS gradients, & interactive JS ...</span>
+                  <span className="font-mono">{isDemoMode ? "Injecting high-fidelity responsive Tailwind assets..." : "Compiling layouts, CSS gradients, & interactive JS ..."}</span>
                 </div>
               </div>
             )}
 
+            {/* Empty Initialization State */}
             {!generationOutput && !isGenerating && (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950">
                 <div className="w-20 h-20 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-6 shadow-xl shadow-slate-950/50">
@@ -703,7 +925,7 @@ ${generationOutput.code}
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">Generate a design to see live preview.</h3>
                 <p className="text-slate-400 text-xs max-w-sm leading-relaxed mb-6">
-                  Configure your secure Gemini API key, input a custom UI layout prompt, attach brand reference guidelines or logos, and tap <span className="text-white font-medium">'Generate Design'</span>.
+                  Configure your secure Gemini API key, or toggle the <span className="text-indigo-400 font-semibold">Demo / Preview Mode</span>, input a design prompt, and click <span className="text-white font-medium">'Generate Design'</span>.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md w-full text-left text-[11px] text-slate-500 border border-slate-850 bg-slate-900/10 p-4 rounded-xl">
                   <div className="flex items-start gap-2">
@@ -726,8 +948,11 @@ ${generationOutput.code}
               </div>
             )}
 
+            {/* Active Render Area */}
             {generationOutput && !isGenerating && (
               <div className="flex-1 flex flex-col min-h-0">
+                
+                {/* TAB 1: Live Render Frame Sandbox */}
                 {activeTab === 'preview' && (
                   <div className="flex-1 bg-slate-950 p-4 flex items-center justify-center overflow-auto">
                     <div 
@@ -737,6 +962,7 @@ ${generationOutput.code}
                         'w-[375px]'
                       }`}
                     >
+                      {/* Sub-frame viewport info header */}
                       <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono shrink-0">
                         <div className="flex items-center space-x-1.5">
                           <span className="w-2.5 h-2.5 rounded-full bg-slate-800 inline-block"></span>
@@ -762,6 +988,7 @@ ${generationOutput.code}
                         </div>
                       </div>
 
+                      {/* Sandboxed iframe */}
                       <div className="flex-1 bg-white relative rounded-b-2xl overflow-hidden">
                         <iframe
                           id="sandbox-iframe"
@@ -775,6 +1002,7 @@ ${generationOutput.code}
                   </div>
                 )}
 
+                {/* TAB 2: Clean Source Code View (Monaco fallback with copy) */}
                 {activeTab === 'code' && (
                   <div className="flex-1 flex flex-col min-h-0 bg-slate-950 p-4">
                     <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
@@ -798,8 +1026,11 @@ ${generationOutput.code}
                   </div>
                 )}
 
+                {/* TAB 3: Design System Reasoning Panels */}
                 {activeTab === 'reasoning' && (
                   <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                    
+                    {/* Color Palette Display */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                       <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Palette className="w-4 h-4 text-pink-400" />
@@ -824,6 +1055,7 @@ ${generationOutput.code}
                       </div>
                     </div>
 
+                    {/* Extracted Components Checklist */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                       <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <Grid className="w-4 h-4 text-indigo-400" />
@@ -844,6 +1076,7 @@ ${generationOutput.code}
                       </div>
                     </div>
 
+                    {/* Premium Architecture Details */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                       <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-2">
                         <Info className="w-4 h-4 text-emerald-400" />
@@ -855,19 +1088,26 @@ ${generationOutput.code}
                         ))}
                       </div>
                     </div>
+
                   </div>
                 )}
+
               </div>
             )}
+
           </div>
 
+          {/* Footer branding and copyright */}
           <footer className="border-t border-slate-800 bg-slate-900/30 py-4 px-6 flex items-center justify-center text-[11px] text-slate-500">
             <div>
-              &copy; 2026 Creatix AI Technologies. Fully Sandboxed Workspace.
+              &copy; 2026 Creatix AI Technologies. Design & Developed by Usman
             </div>
           </footer>
+
         </section>
+
       </main>
+
     </div>
   );
 }
