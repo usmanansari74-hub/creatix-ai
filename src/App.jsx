@@ -579,30 +579,6 @@ ${generationOutput.code}
               )}
             </div>
 
-            {/* Quick Toggle for Demo Mode */}
-            <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl">
-              <div className="flex flex-col">
-                <span className="text-[11px] font-semibold text-slate-200">Demo / Preview Mode</span>
-                <span className="text-[9px] text-slate-400">Generates instant mock code templates without key</span>
-              </div>
-              <button 
-                onClick={handleToggleDemoMode}
-                className="text-slate-400 hover:text-white transition-colors"
-              >
-                {isDemoMode ? (
-                  <ToggleRight className="w-8 h-8 text-indigo-500" />
-                ) : (
-                  <ToggleLeft className="w-8 h-8 text-slate-650" />
-                )}
-              </button>
-            </div>
-
-            {!isDemoMode && (
-              <>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Required to communicate with Gemini. Your credentials remain safe and secure, stored locally in memory only.
-                </p>
-
                 {/* Model Selector Dropdown */}
                 <div className="space-y-1">
                   <label className="block text-[11px] font-medium text-slate-400 flex items-center gap-1">
@@ -644,7 +620,7 @@ ${generationOutput.code}
                   )}
                 </div>
               </>
-            )}
+            
           </div>
 
           {/* Prompt input Form */}
