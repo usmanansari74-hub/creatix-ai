@@ -2,13 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   Key, 
-  Upload, 
   Code, 
   Eye, 
   Copy, 
   Download, 
-  Trash2, 
-  FileText, 
   Palette, 
   Grid, 
   FileCode, 
@@ -21,12 +18,12 @@ import {
   Info,
   Cpu,
   MessageSquareText,
-  ShieldCheck,
-  ToggleLeft,
-  ToggleRight,
   Terminal,
   CheckCircle,
-  XCircle
+  XCircle,
+  Upload,
+  Trash2,
+  FileText
 } from 'lucide-react';
 
 const SYSTEM_PROMPT = `You are Creatix AI, a premier Senior UI/UX Designer and Frontend Engineer. 
@@ -54,7 +51,6 @@ export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
   const [isKeyValid, setIsKeyValid] = useState(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -93,7 +89,6 @@ export default function App() {
       const isValid = await testGeminiKey(key, modelId);
       if (isValid) {
         setIsKeyValid('valid');
-        setIsDemoMode(false);
       } else {
         setIsKeyValid('invalid');
       }
@@ -157,32 +152,17 @@ export default function App() {
     const result = await testGeminiKey(apiKey, selectedModel);
     if (result) {
       setIsKeyValid('valid');
-      setIsDemoMode(false);
       sessionStorage.setItem('creatix_gemini_key', apiKey);
     } else {
       setIsKeyValid('invalid');
     }
   };
 
-  const handleToggleDemoMode = () => {
-    setIsDemoMode(prev => {
-      const next = !prev;
-      if (next) {
-        setIsKeyValid('valid');
-      } else {
-        setIsKeyValid(apiKey ? 'checking' : null);
-        if (apiKey) {
-          validateApiKeyOnLoad(apiKey, selectedModel);
-        }
-      }
-      return next;
-    });
-  };
-
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     files.forEach(file => {
       const reader = new FileReader();
+      
       const isImage = file.type.startsWith('image/');
       const isText = file.type.includes('text') || file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.md');
       
@@ -299,43 +279,12 @@ export default function App() {
       return;
     }
 
-    if (!isDemoMode && (!apiKey.trim() || isKeyValid !== 'valid')) {
-      setErrorMessage("A valid Gemini API key is required to use the generator. Please insert and validate your key in the Left Sidebar, or toggle 'Demo Mode'.");
+    if (!apiKey.trim() || isKeyValid !== 'valid') {
+      setErrorMessage("A valid Gemini API key is required to use the generator. Please insert and validate your key in the Left Sidebar.");
       return;
     }
 
     setIsGenerating(true);
-
-    if (isDemoMode) {
-      await new Promise(r => setTimeout(r, 1500));
-      let mockResult = {
-        reasoning: "Selected a modern high-contrast design system featuring glassmorphism elements, custom smooth transition backdrops, and interactive modular cards optimized for maximum user engagement and responsiveness.",
-        components: ["Navigation Bar", "Hero Spotlight Section", "Interactive Feature Grid", "Action Form Component", "Footer"],
-        palette: ["#4F46E5", "#06B6D4", "#0F172A", "#FFFFFF"],
-        code: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Creatix Premium Layout</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between">
-  <nav class="px-6 py-4 border-b border-slate-800 bg-slate-900/40 backdrop-blur flex justify-between items-center">
-    <span class="text-base font-bold tracking-wider bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">CREATIX DEMO PREVIEW</span>
-  </nav>
-  <div class="max-w-4xl mx-auto px-6 py-20 text-center flex-1 flex flex-col justify-center items-center">
-    <h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-6">Generated Demo Workspace</h1>
-    <p class="text-slate-400 text-base max-w-xl leading-relaxed mb-8">"${prompt}"</p>
-  </div>
-</body>
-</html>`
-      };
-      setGenerationOutput(mockResult);
-      setActiveTab('preview');
-      setIsGenerating(false);
-      return;
-    }
 
     try {
       let fileContext = "";
@@ -360,7 +309,14 @@ export default function App() {
       }
 
       const fullUserPrompt = `User Request: "${prompt}"\n${fileContext}\n\nGenerate beautiful website/component UI matching this request. Implement high quality custom styles and elegant features.`;
-      const parts = [{ text: fullUserPrompt }, ...imagesPayload];
+      
+      const parts = [
+        { text: fullUserPrompt }
+      ];
+
+      imagesPayload.forEach(img => {
+        parts.push(img);
+      });
 
       const callGemini = async (retries = 5, delay = 1000) => {
         const modelsToTry = [
@@ -535,9 +491,9 @@ ${generationOutput.code}
         {/* Top Status */}
         <div className="flex items-center space-x-4">
           <div className="hidden md:flex items-center space-x-2 bg-slate-950/60 px-3 py-1.5 rounded-full border border-slate-800">
-            <div className={`w-2 h-2 rounded-full ${isDemoMode ? 'bg-purple-500' : 'bg-emerald-500'} animate-ping`}></div>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
             <span className="text-[11px] text-slate-400">
-              Active Model: <span className="text-indigo-400 font-mono">{isDemoMode ? 'Local Template Engine' : selectedModel}</span>
+              Active Model: <span className="text-indigo-400 font-mono">{selectedModel}</span>
             </span>
           </div>
         </div>
@@ -556,11 +512,7 @@ ${generationOutput.code}
                 <Key className="w-4 h-4 text-indigo-400" />
                 Gemini API Key Guard
               </span>
-              {isDemoMode ? (
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-purple-400/10 text-purple-400 border border-purple-400/20 shadow-sm">
-                  <ShieldCheck className="w-3 h-3 mr-1" /> Demo Active
-                </span>
-              ) : isKeyValid === 'valid' ? (
+              {isKeyValid === 'valid' ? (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-400/10 text-emerald-400 border border-emerald-400/20 shadow-sm shadow-emerald-500/5">
                   <CheckCircle className="w-3 h-3 mr-1" /> API Connected
                 </span>
@@ -579,48 +531,50 @@ ${generationOutput.code}
               )}
             </div>
 
-                {/* Model Selector Dropdown */}
-                <div className="space-y-1">
-                  <label className="block text-[11px] font-medium text-slate-400 flex items-center gap-1">
-                    <Cpu className="w-3 h-3 text-indigo-400" /> Choose Model Endpoint
-                  </label>
-                  <select 
-                    value={selectedModel}
-                    onChange={(e) => handleModelChange(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                  >
-                    {AVAILABLE_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Required to communicate with Gemini. Your credentials remain safe and secure, stored locally in memory only.
+            </p>
 
-                <div className="space-y-2">
-                  <div className="relative">
-                    <input
-                      type="password"
-                      placeholder="Paste your Gemini API key (AIzaSy...)"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-slate-600 font-mono"
-                    />
-                  </div>
-                  <button
-                    onClick={handleValidateKey}
-                    disabled={isKeyValid === 'checking'}
-                    className="w-full bg-slate-800 hover:bg-slate-750 text-white font-medium py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center space-x-2 border border-slate-750 hover:border-slate-700 active:scale-[0.98] disabled:opacity-50"
-                  >
-                    <span>Validate API Key</span>
-                  </button>
+            {/* Model Selector Dropdown */}
+            <div className="space-y-1">
+              <label className="block text-[11px] font-medium text-slate-400 flex items-center gap-1">
+                <Cpu className="w-3 h-3 text-indigo-400" /> Choose Model Endpoint
+              </label>
+              <select 
+                value={selectedModel}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              >
+                {AVAILABLE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
 
-                  {validationDetails && (
-                    <div className="text-[10px] text-rose-400 bg-rose-500/5 border border-rose-500/10 p-2.5 rounded-lg font-mono whitespace-pre-wrap break-all leading-normal">
-                      <strong>Diagnostic details:</strong> {validationDetails}
-                    </div>
-                  )}
+            <div className="space-y-2">
+              <div className="relative">
+                <input
+                  type="password"
+                  placeholder="Paste your Gemini API key (AIzaSy...)"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-slate-600 font-mono"
+                />
+              </div>
+              <button
+                onClick={handleValidateKey}
+                disabled={isKeyValid === 'checking'}
+                className="w-full bg-slate-800 hover:bg-slate-750 text-white font-medium py-2 px-3 rounded-xl text-xs transition-all flex items-center justify-center space-x-2 border border-slate-750 hover:border-slate-700 active:scale-[0.98] disabled:opacity-50"
+              >
+                <span>Validate API Key</span>
+              </button>
+
+              {validationDetails && (
+                <div className="text-[10px] text-rose-400 bg-rose-500/5 border border-rose-500/10 p-2.5 rounded-lg font-mono whitespace-pre-wrap break-all leading-normal">
+                  <strong>Diagnostic details:</strong> {validationDetails}
                 </div>
-              </>
-            
+              )}
+            </div>
           </div>
 
           {/* Prompt input Form */}
@@ -652,7 +606,7 @@ ${generationOutput.code}
               <button 
                 onClick={handleCriticizeDesign}
                 disabled={isAnalyzing || !generationOutput || !apiKey}
-                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
+                className="bg-slate-800 hover:bg-slate-750 disabled:opacity-50 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5"
                 title={!generationOutput ? "Generate UI First" : "Get expert design feedback"}
               >
                 <MessageSquareText className="w-3.5 h-3.5 text-blue-400" />
@@ -763,7 +717,7 @@ ${generationOutput.code}
               </button>
               {isKeyValid !== 'valid' && (
                 <p className="text-[10px] text-amber-500 text-center mt-2 font-medium animate-pulse">
-                  * Verify API key or Switch to "Demo / Preview Mode" to Generate Designs
+                  * Verify Gemini API key in Left Sidebar to Generate Designs
                 </p>
               )}
             </div>
@@ -884,11 +838,11 @@ ${generationOutput.code}
                 </div>
                 <h3 className="text-xl font-bold text-white mb-2 animate-pulse">Creatix UI Generation Pipeline active</h3>
                 <p className="text-slate-400 text-sm max-w-md leading-relaxed">
-                  {isDemoMode ? "Retrieving tailored design system tokens and loading preview layouts..." : `Synthesizing layout requirements with active model ${selectedModel}...`}
+                  Synthesizing layout requirements with active model {selectedModel}...
                 </p>
                 <div className="mt-8 flex items-center space-x-3 text-xs bg-slate-900 border border-slate-800 px-4 py-2 rounded-full text-slate-300">
                   <Terminal className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                  <span className="font-mono">{isDemoMode ? "Injecting high-fidelity responsive Tailwind assets..." : "Compiling layouts, CSS gradients, & interactive JS ..."}</span>
+                  <span className="font-mono">Compiling layouts, CSS gradients, & interactive JS ...</span>
                 </div>
               </div>
             )}
@@ -901,7 +855,7 @@ ${generationOutput.code}
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">Generate a design to see live preview.</h3>
                 <p className="text-slate-400 text-xs max-w-sm leading-relaxed mb-6">
-                  Configure your secure Gemini API key, or toggle the <span className="text-indigo-400 font-semibold">Demo / Preview Mode</span>, input a design prompt, and click <span className="text-white font-medium">'Generate Design'</span>.
+                  Configure your secure Gemini API key, input a design prompt, and click <span className="text-white font-medium">'Generate Design'</span>.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md w-full text-left text-[11px] text-slate-500 border border-slate-850 bg-slate-900/10 p-4 rounded-xl">
                   <div className="flex items-start gap-2">
